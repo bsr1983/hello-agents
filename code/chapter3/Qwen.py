@@ -19,7 +19,7 @@ print("模型和分词器加载完成！")
 # 准备对话输入
 messages = [
     {"role": "system", "content": "You are a helpful assistant."},
-    {"role": "user", "content": "你好，请介绍你自己。"}
+    {"role": "user", "content": "你好，请介绍你自己。可以详细介绍一下你自己能做的事情，包括谁创造的你，以及你的工作原理是什么，最后再介绍一下你的知识库截止日期是什么时候，以及你自己有哪些局限性。"}
 ]
 
 # 使用分词器的模板格式化输入

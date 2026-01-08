@@ -1,0 +1,11 @@
+# HTTP 请求库（用于直接调用豆包 API）
+requests>=2.28.0
+
+# LLM 客户端依赖（可选，如果使用 OpenAI SDK）
+# openai>=1.0.0
+
+# 环境变量管理
+python-dotenv>=1.0.0
+
+# 搜索引擎工具（SerpAPI）
+google-search-results>=2.4.0

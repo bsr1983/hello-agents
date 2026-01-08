@@ -44,25 +44,47 @@ class ReActAgent:
 
             messages = [{"role": "user", "content": prompt}]
             response_text = self.llm_client.think(messages=messages)
+            
             if not response_text:
-                print("错误：LLM未能返回有效响应。"); break
+                print("错误：LLM未能返回有效响应。")
+                break
 
             thought, action = self._parse_output(response_text)
-            if thought: print(f"🤔 思考: {thought}")
-            if not action: print("警告：未能解析出有效的Action，流程终止。"); break
             
-            if action.startswith("Finish"):
-                final_answer = self._parse_action_input(action)
+            if thought: 
+                print(f"🤔 思考: {thought}")
+            if not action: 
+                print("警告：未能解析出有效的Action，流程终止。")
+                break
+            
+            # 清理 action 中的反引号，然后检查是否是 Finish
+            action_cleaned = action.strip().strip('`')
+            
+            # 检查是否是 Finish 动作（Finish 不是工具，而是结束标识）
+            if action_cleaned.startswith("Finish"):
+                final_answer = self._parse_action_input(action_cleaned)
                 print(f"🎉 最终答案: {final_answer}")
                 return final_answer
             
-            tool_name, tool_input = self._parse_action(action)
+            # 解析工具名和输入
+            tool_name, tool_input = self._parse_action(action_cleaned)
+            
             if not tool_name or not tool_input:
-                self.history.append("Observation: 无效的Action格式，请检查。"); continue
+                print(f"⚠️ 无效的Action格式: {action}")
+                self.history.append("Observation: 无效的Action格式，请检查。")
+                continue
 
             print(f"🎬 行动: {tool_name}[{tool_input}]")
+            
+            # 调用工具
             tool_function = self.tool_executor.getTool(tool_name)
-            observation = tool_function(tool_input) if tool_function else f"错误：未找到名为 '{tool_name}' 的工具。"
+            if not tool_function:
+                observation = f"错误：未找到名为 '{tool_name}' 的工具。"
+            else:
+                try:
+                    observation = tool_function(tool_input)
+                except Exception as e:
+                    observation = f"错误：执行工具时发生异常 - {e}"
             
             print(f"👀 观察: {observation}")
             self.history.append(f"Action: {action}")
@@ -72,15 +94,43 @@ class ReActAgent:
         return None
 
     def _parse_output(self, text: str):
-        thought_match = re.search(r"Thought: (.*)", text)
-        action_match = re.search(r"Action: (.*)", text)
+        """解析LLM输出，提取Thought和Action"""
+        # 尝试多种模式匹配 Thought
+        thought_match = re.search(r"Thought:\s*(.*?)(?=\nAction:|$)", text, re.DOTALL)
+        if not thought_match:
+            thought_match = re.search(r"Thought:\s*(.*)", text)
+        
+        # 尝试多种模式匹配 Action
+        action_match = re.search(r"Action:\s*(.*?)(?=\nThought:|$)", text, re.DOTALL)
+        if not action_match:
+            action_match = re.search(r"Action:\s*(.*)", text)
+        
         thought = thought_match.group(1).strip() if thought_match else None
         action = action_match.group(1).strip() if action_match else None
+        
         return thought, action
 
     def _parse_action(self, action_text: str):
-        match = re.match(r"(\w+)\[(.*)\]", action_text)
-        return (match.group(1), match.group(2)) if match else (None, None)
+        """
+        解析Action字符串，提取工具名和输入参数。
+        支持格式：
+        - Search[query]
+        - Search["query"]
+        - `Search[query]`
+        - `Search["query"]`
+        """
+        # 移除可能的反引号
+        action_text = action_text.strip().strip('`')
+        
+        # 匹配格式: tool_name[input] 或 tool_name["input"]
+        match = re.match(r"(\w+)\[(.*?)\]", action_text)
+        
+        if match:
+            tool_name = match.group(1)
+            tool_input = match.group(2).strip().strip('"').strip("'")
+            return (tool_name, tool_input)
+        else:
+            return (None, None)
 
     def _parse_action_input(self, action_text: str):
         match = re.match(r"\w+\[(.*)\]", action_text)
@@ -92,5 +142,5 @@ if __name__ == '__main__':
     search_desc = "一个网页搜索引擎。当你需要回答关于时事、事实以及在你的知识库中找不到的信息时，应使用此工具。"
     tool_executor.registerTool("Search", search_desc, search)
     agent = ReActAgent(llm_client=llm, tool_executor=tool_executor)
-    question = "华为最新的手机是哪一款？它的主要卖点是什么？"
+    question = "2026年1月5日 小米公关负责人徐洁云发的关于KOL合作的微博具体说的是什么事？米粉为什么反应很大？"
     agent.run(question)
