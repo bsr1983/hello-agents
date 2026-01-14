@@ -10,19 +10,69 @@ from dotenv import load_dotenv
 # 加载环境变量
 load_dotenv()
 
-# 先测试一个版本，使用 OpenAI 客户端
+# 使用豆包大模型客户端（兼容 OpenAI 格式）
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 from autogen_agentchat.agents import AssistantAgent, UserProxyAgent
 from autogen_agentchat.teams import RoundRobinGroupChat
 from autogen_agentchat.conditions import TextMentionTermination
 from autogen_agentchat.ui import Console
 
-def create_openai_model_client():
-    """创建 OpenAI 模型客户端用于测试"""
+def create_doubao_model_client():
+    """创建豆包大模型客户端
+    
+    环境变量配置：
+    - DOUBAO_API_KEY 或 ARK_API_KEY: 豆包 API Key
+    - DOUBAO_BASE_URL: API 基础 URL（默认: https://ark.cn-beijing.volces.com/api/v3）
+    - DOUBAO_MODEL: 端点 ID（Endpoint ID，格式如 ep-xxx）
+    """
+    # 获取豆包 API Key（支持两种环境变量名称）
+    api_key = os.getenv("DOUBAO_API_KEY") or os.getenv("ARK_API_KEY")
+    if not api_key:
+        raise ValueError(
+            "未配置豆包 API Key！请设置环境变量 DOUBAO_API_KEY 或 ARK_API_KEY"
+        )
+    
+    # 获取豆包 API 基础 URL
+    base_url = os.getenv("DOUBAO_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3")
+    # 确保 base_url 格式正确（豆包 API 需要完整的 v3 路径）
+    base_url = base_url.rstrip('/')
+    if not base_url.endswith('/v3'):
+        if base_url.endswith('/api'):
+            base_url = f"{base_url}/v3"
+        else:
+            base_url = f"{base_url}/api/v3"
+    
+    # 获取模型端点 ID
+    model = os.getenv("DOUBAO_MODEL")
+    if not model:
+        raise ValueError(
+            "未配置豆包模型端点 ID！请设置环境变量 DOUBAO_MODEL（格式如 ep-xxx）"
+        )
+    
+    print(f"🔧 豆包大模型配置:")
+    print(f"  - 端点 ID: {model}")
+    print(f"  - API URL: {base_url}")
+    print(f"  - API Key: {'已设置' if api_key else '未设置'}")
+    
+    # 定义豆包模型的 model_info（非 OpenAI 模型需要此参数）
+    # 这些参数帮助 AutoGen 了解模型的能力边界
+    model_info = {
+        "function_calling": True,      # 支持函数调用
+        "max_tokens": 4096,            # 最大输出 token 数
+        "context_length": 32768,       # 上下文长度
+        "vision": False,               # 不支持视觉功能
+        "json_output": True,           # 支持 JSON 输出
+        "family": "doubao",            # 模型家族
+        "structured_output": True,     # 支持结构化输出
+    }
+    
+    # 使用 OpenAIChatCompletionClient，因为豆包 API 兼容 OpenAI 格式
+    # 对于非 OpenAI 模型，必须提供 model_info 参数
     return OpenAIChatCompletionClient(
-        model=os.getenv("LLM_MODEL_ID", "gpt-4o"),
-        api_key=os.getenv("LLM_API_KEY"),
-        base_url=os.getenv("LLM_BASE_URL", "https://api.openai.com/v1")
+        model=model,
+        api_key=api_key,
+        base_url=base_url,
+        model_info=model_info
     )
 
 def create_product_manager(model_client):
@@ -118,8 +168,8 @@ async def run_software_development_team():
     
     print("🔧 正在初始化模型客户端...")
     
-    # 先使用标准的 OpenAI 客户端测试
-    model_client = create_openai_model_client()
+    # 使用豆包大模型客户端
+    model_client = create_doubao_model_client()
     
     print("👥 正在创建智能体团队...")
     
@@ -183,7 +233,10 @@ if __name__ == "__main__":
         
     except ValueError as e:
         print(f"❌ 配置错误：{e}")
-        print("请检查 .env 文件中的配置是否正确")
+        print("\n请检查 .env 文件中的豆包配置：")
+        print("  - DOUBAO_API_KEY 或 ARK_API_KEY: 豆包 API Key")
+        print("  - DOUBAO_BASE_URL: API 基础 URL（可选，默认: https://ark.cn-beijing.volces.com/api/v3）")
+        print("  - DOUBAO_MODEL: 端点 ID（Endpoint ID，格式如 ep-xxx）")
     except Exception as e:
         print(f"❌ 运行错误：{e}")
         import traceback
